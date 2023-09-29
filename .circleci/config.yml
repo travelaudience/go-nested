@@ -1,0 +1,24 @@
+version: 2.1
+
+orbs:
+  ta-go: travelaudience/go@0.9
+
+executors:
+  golang-executor:
+    docker:
+    - image: cimg/go:1.19
+    environment:
+      GO111MODULE: "on"
+
+workflows:
+  build_and_test:
+    jobs:
+
+    - ta-go/checks:
+        name: check
+        exec: golang-executor
+        run-static-analysis: true
+
+    - ta-go/test_and_coverage:
+        name: test
+        exec: golang-executor
