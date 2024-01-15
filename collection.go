@@ -47,6 +47,11 @@ func (c *Collection) Add(s Service) {
 
 	c.services = append(c.services, s)
 	s.Subscribe(c.id, c.updates)
+
+	// Trigger an update to include the state of the newly added service.
+	go func() {
+		c.updates <- Notification{}
+	}()
 }
 
 // StateCount returns the number of monitored services currently in the given state.
