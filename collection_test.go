@@ -15,7 +15,6 @@ func TestCollection(t *testing.T) {
 	assertEqual(t, NotReady, s)
 	assertEqual(t, nil, e)
 	assertEqual(t, s, co.GetState())
-	assertEqual(t, false, co.IsUp())
 	assertEqual(t, map[string]bool{}, co.Up())
 
 	// Add services.
@@ -27,7 +26,6 @@ func TestCollection(t *testing.T) {
 	assertEqual(t, NotReady, s)
 	assertEqual(t, nil, e)
 	assertEqual(t, s, co.GetState())
-	assertEqual(t, false, co.IsUp())
 	assertEqual(t, map[string]bool{"service 0": false, "service 1": false}, co.Up())
 
 	// One service is ready.
@@ -37,7 +35,6 @@ func TestCollection(t *testing.T) {
 	assertEqual(t, NotReady, s)
 	assertEqual(t, nil, e)
 	assertEqual(t, s, co.GetState())
-	assertEqual(t, false, co.IsUp())
 	assertEqual(t, map[string]bool{"service 0": true, "service 1": false}, co.Up())
 
 	// Both services are ready.
@@ -47,7 +44,6 @@ func TestCollection(t *testing.T) {
 	assertEqual(t, Ready, s)
 	assertEqual(t, nil, e)
 	assertEqual(t, s, co.GetState())
-	assertEqual(t, true, co.IsUp())
 	assertEqual(t, map[string]bool{"service 0": true, "service 1": true}, co.Up())
 
 	assertEqual(t, 2, co.StateCount(Ready))
@@ -61,7 +57,6 @@ func TestCollection(t *testing.T) {
 	assertEqual(t, Stopped, s)
 	assertEqual(t, nil, e)
 	assertEqual(t, s, co.GetState())
-	assertEqual(t, false, co.IsUp())
 	assertEqual(t, map[string]bool{"service 0": false, "service 1": true}, co.Up())
 
 	assertEqual(t, 1, co.StateCount(Ready))
@@ -75,14 +70,12 @@ func TestCollection(t *testing.T) {
 	assertEqual(t, Stopped, s)
 	assertEqual(t, nil, e)
 	assertEqual(t, s, co.GetState())
-	assertEqual(t, false, co.IsUp())
 	assertEqual(t, map[string]bool{"service 0": false, "service 1": false}, co.Up())
 
 	// Stop all services.
 	co.Stop()
 	assertEqual(t, 0, co.StateCount(Ready))
 	assertEqual(t, 0, co.StateCount(NotReady))
-	assertEqual(t, false, co.IsUp())
 	assertEqual(t, map[string]bool{}, co.Up())
 
 	// We also have no stopped services because the service list has been emptied.
@@ -109,6 +102,5 @@ func TestCollection2(t *testing.T) {
 	assertEqual(t, NotReady, s)
 	assertEqual(t, nil, e)
 	assertEqual(t, s, co.GetState())
-	assertEqual(t, false, co.IsUp())
 	assertEqual(t, map[string]bool{"service 0": true, "service 1": false}, co.Up())
 }

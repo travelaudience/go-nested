@@ -75,11 +75,6 @@ func (c *Collection) StateCount(state State) int {
 	return n
 }
 
-// IsUp returns true if all the monitored services are ready.
-func (c *Collection) IsUp() bool {
-	return c.GetState() == Ready
-}
-
 // UpDown returns two slices, one containing the labels of monitored services
 // Returns nil if all services are ready.
 func (c *Collection) Up() map[string]bool {
