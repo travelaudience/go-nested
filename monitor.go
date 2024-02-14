@@ -21,7 +21,14 @@ type Monitor struct {
 var _ Service = &Monitor{}
 
 // GetState returns the current state of the service.
-func (m *Monitor) GetState() (State, error) {
+func (m *Monitor) GetState() State {
+	m.Lock()
+	defer m.Unlock()
+	return m.state
+}
+
+// GetFullState returns the current state and error state of the service.
+func (m *Monitor) GetFullState() (State, error) {
 	m.Lock()
 	defer m.Unlock()
 	return m.state, m.err

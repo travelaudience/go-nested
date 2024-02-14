@@ -19,7 +19,7 @@ import (
 type Collection struct {
 	Monitor
 	sync.Mutex
-	services []Service
+	services map[string]Service
 	id       string
 	updates  chan Notification
 }
@@ -27,13 +27,15 @@ type Collection struct {
 // Verifies that a Monitor implements the Service interface.
 var _ Service = &Collection{}
 
-// Add adds a service to be monitored.  Panics if the service has already been added.
-func (c *Collection) Add(s Service) {
+// Add adds a service to be monitored.  Panics if the service has already been added.  Panics if the label has been
+// used already for another service.
+func (c *Collection) Add(label string, s Service) {
 	c.Lock()
 	defer c.Unlock()
 
 	// Initialize the update channel if this is the first service to be added.
-	if c.updates == nil {
+	if c.services == nil {
+		c.services = make(map[string]Service)
 		c.updates = make(chan Notification)
 		go func() {
 			for range c.updates {
@@ -43,9 +45,14 @@ func (c *Collection) Add(s Service) {
 		// Using the same ID to subscribe to all monitored services means that Subscribe will panic below if a service
 		// is added twice.
 		c.id = "collection-" + strconv.Itoa(rand.Int())
+	} else {
+		// Otherwise check that we're not reusing a label.
+		if _, ok := c.services[label]; ok {
+			panic("add: label " + label + " already in use")
+		}
 	}
 
-	c.services = append(c.services, s)
+	c.services[label] = s
 	s.Subscribe(c.id, c.updates)
 
 	// Trigger an update to include the state of the newly added service.
@@ -61,11 +68,28 @@ func (c *Collection) StateCount(state State) int {
 
 	var n int
 	for _, service := range c.services {
-		if s, _ := service.GetState(); s == state {
+		if service.GetState() == state {
 			n++
 		}
 	}
 	return n
+}
+
+// IsUp returns true if all the monitored services are ready.
+func (c *Collection) IsUp() bool {
+	return c.GetState() == Ready
+}
+
+// UpDown returns two slices, one containing the labels of monitored services
+// Returns nil if all services are ready.
+func (c *Collection) Up() map[string]bool {
+	up := make(map[string]bool)
+	c.Lock()
+	defer c.Unlock()
+	for label, service := range c.services {
+		up[label] = service.GetState() == Ready
+	}
+	return up
 }
 
 // Stop stops the collection and all monitored services and releases all of the resources.  Neither the collection nor
@@ -118,8 +142,7 @@ func (c *Collection) getOverallState() State {
 
 	we := State(Ready)
 	for _, service := range c.services {
-		state, _ := service.GetState()
-		switch state {
+		switch service.GetState() {
 		case Stopped:
 			return Stopped
 		case NotReady:

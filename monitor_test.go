@@ -37,20 +37,20 @@ func TestMonitor(t *testing.T) {
 
 	// A new Monitor is not ready.
 	mon := Monitor{}
-	s, e := mon.GetState()
+	s, e := mon.GetFullState()
 	assertEqual(t, NotReady, s)
 	assertEqual(t, nil, e)
 
 	// Set to ready.
 	mon.SetState(Ready, nil)
-	s, e = mon.GetState()
+	s, e = mon.GetFullState()
 	assertEqual(t, Ready, s)
 	assertEqual(t, nil, e)
 
 	// Set to not ready with a reason.
 	reason := errors.New("some reason")
 	mon.SetState(NotReady, reason)
-	s, e = mon.GetState()
+	s, e = mon.GetFullState()
 	assertEqual(t, NotReady, s)
 	assertEqual(t, reason, e)
 
@@ -59,13 +59,13 @@ func TestMonitor(t *testing.T) {
 
 	// Set ready again.
 	mon.SetState(Ready, nil)
-	s, e = mon.GetState()
+	s, e = mon.GetFullState()
 	assertEqual(t, Ready, s)
 	assertEqual(t, nil, e)
 
 	// Stop.
 	mon.Stop()
-	s, e = mon.GetState()
+	s, e = mon.GetFullState()
 	assertEqual(t, Stopped, s)
 	assertEqual(t, nil, e)
 
@@ -80,13 +80,13 @@ func TestMonitor2(t *testing.T) {
 	// Failure on initialization.
 	failure := errors.New("some failure")
 	mon.SetState(Stopped, failure)
-	s, e := mon.GetState()
+	s, e := mon.GetFullState()
 	assertEqual(t, Stopped, s)
 	assertEqual(t, failure, e)
 
 	// Now Stop() should be a no-op
 	mon.Stop()
-	s, e = mon.GetState()
+	s, e = mon.GetFullState()
 	assertEqual(t, Stopped, s)
 	assertEqual(t, failure, e) // note that the error condition is still there
 }
