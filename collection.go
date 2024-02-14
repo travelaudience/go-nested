@@ -75,8 +75,8 @@ func (c *Collection) StateCount(state State) int {
 	return n
 }
 
-// Up returns a map containing the labels of all the currently monitored services and an indication of whether each is
-// in the ready state (true) or not (false).
+// Up returns a map whose keys are the labels of all the currently monitored services and whose values are true if
+// the service is ready and false otherwise.
 func (c *Collection) Up() map[string]bool {
 	up := make(map[string]bool)
 	c.Lock()
