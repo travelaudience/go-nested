@@ -19,8 +19,10 @@ func (s State) String() string {
 }
 
 type Service interface {
-	// GetState returns the current state and error state of the service.
-	GetState() (State, error)
+	// GetState returns the current state of the service.
+	GetState() State
+	// GetFullState returns the current state and error state of the service.
+	GetFullState() (State, error)
 	// Stop stops the service, and releases all resources.  After sending the final update to the stopped state,
 	// all subscriptions are unsubscribed.  Future calls to GetState() will always return Stopped.
 	Stop()
