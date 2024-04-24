@@ -1,7 +1,7 @@
 version: 2.1
 
 orbs:
-  ta-go: travelaudience/go@0.9
+  ta-go: travelaudience/go@0.9.3
 
 executors:
   golang-executor:
