@@ -24,7 +24,8 @@ func assertEqual[X any](t *testing.T, want, got X) {
 }
 
 func TestName(t *testing.T) {
+	assertEqual(t, "initializing", Initializing.String())
 	assertEqual(t, "ready", Ready.String())
-	assertEqual(t, "not ready", NotReady.String())
+	assertEqual(t, "error", Error.String())
 	assertEqual(t, "stopped", Stopped.String())
 }

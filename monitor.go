@@ -1,7 +1,6 @@
 package nested
 
 import (
-	"fmt"
 	"sync"
 )
 
@@ -10,9 +9,9 @@ import (
 // An empty Monitor is ready to use and in the Not Ready state.  A Monitor must not be copied after first use.
 type Monitor struct {
 	sync.Mutex
-	state         State // current state
-	err           error // current error state
-	subscriptions map[string]chan<- Notification
+	state     State // current state
+	err       error // current error state, if the state is not ready
+	observers map[Observer]struct{}
 }
 
 // Verifies that a Monitor implements the Service interface.  Note that the Service interface does NOT include the
@@ -27,86 +26,84 @@ func (m *Monitor) GetState() State {
 	return m.state
 }
 
-// GetFullState returns the current state and error state of the service.
-func (m *Monitor) GetFullState() (State, error) {
+// Err returns the error from the most recent Err state, or nil if the Monitor has never been in the error state.
+func (m *Monitor) Err() error {
 	m.Lock()
 	defer m.Unlock()
-	return m.state, m.err
+	return m.err
 }
 
-// Stop sets the service to stopped and cancels all subsriptions.  Does nothing if the service is already stopped
-// or failed.
+// Stop sets the service to stopped.  If there are registered observers, all observers are called before returning.
 func (m *Monitor) Stop() {
-	m.setState(Stopped, nil, true)
+	m.setState(Stopped, nil)
 }
 
-// Subscribe creates a subscription to state changes, and will send all subsequent state changes to the channel provided.
-func (m *Monitor) Subscribe(id string, channel chan<- Notification) {
+// Register registers an observer, whose OnNotify method will be called any time there is a state change.  Does nothing
+// if the observer is already registered.
+func (m *Monitor) Register(o Observer) {
 	m.Lock()
 	defer m.Unlock()
-	if m.subscriptions == nil {
-		m.subscriptions = make(map[string]chan<- Notification)
+	if m.observers == nil {
+		m.observers = make(map[Observer]struct{})
 	}
-	m.subscriptions[id] = channel
+	m.observers[o] = struct{}{}
 }
 
-// Unsubscribe removes the subscription with the id provided.  Does nothing if the subscription doesn't exist.
-func (m *Monitor) Unsubscribe(id string) {
+// Deregister removes a registered observer.  Does nothing if the observer is not registered.
+func (m *Monitor) Deregister(o Observer) {
 	m.Lock()
 	defer m.Unlock()
-	delete(m.subscriptions, id)
+	delete(m.observers, o)
 }
 
-// SetState sets the state and error state.  SetState should only be set by the package implementing the service.
-// If there are subscriptions, SetState returns after the notifications are consumed.
-//
-// SetState can be used to change either the state or the error state, or both.  If a call to SetState results
-// in no change, then the result is a no-op.
-//
-// SetState panics on an attempt to change the state or error state of a stopped service.  (It won't panic if
-// there's no change.)
-func (m *Monitor) SetState(newState State, newErr error) {
-	m.setState(newState, newErr, false)
+// SetReady sets the monitor state to Ready.  If there are registered observers, all observers are called before returning.
+// Panics if the monitor is already stopped.
+func (m *Monitor) SetReady() {
+	m.setState(Ready, nil)
 }
 
-func (m *Monitor) setState(newState State, newErr error, ignoreStopped bool) {
+// SetReady sets the monitor state to Error.  If there are registered observers, all observers are called before returning.
+// Panics if the monitor is already stopped.
+func (m *Monitor) SetError(err error) {
+	m.setState(Error, err)
+}
 
-	if _, ok := names[newState]; !ok {
-		panic(fmt.Sprintf("state %d is undefined", newState))
-	}
+func (m *Monitor) setState(newState State, newErr error) {
 
 	// Initialize the wait group first so that wg.Wait() runs after the lock is released.  That way, if we block
-	// on any of the subscription channels, we do so without holding the lock.
+	// on any of the observer callbacks, we do so without holding the lock.
 	var wg sync.WaitGroup
 	defer wg.Wait()
 
 	m.Lock()
 	defer m.Unlock()
 
-	if newState == m.state && newErr == m.err {
+	if newState == m.state {
 		return // nothing to do
 	}
 
 	if m.state == Stopped {
-		if ignoreStopped {
-			return
-		}
 		panic("cannot transition from stopped state")
 	}
 
-	m.state, m.err = newState, newErr
-
-	// Notify all subscribers.
-	wg.Add(len(m.subscriptions))
-	for id, ch := range m.subscriptions {
-		// Run these in the background so as not to block while holding the lock.
-		go func(id string, ch chan<- Notification) {
-			ch <- Notification{ID: id, State: newState, Error: newErr}
-			wg.Done()
-		}(id, ch)
+	ev := Event{
+		OldState: m.state,
+		NewState: newState,
+		Error:    newErr,
 	}
 
-	if newState == Stopped {
-		m.subscriptions = nil
+	m.state = newState
+	if newState == Error {
+		m.err = newErr
+	}
+
+	// Notify all observers.
+	wg.Add(len(m.observers))
+	for o := range m.observers {
+		// Run these in the background so as not to block while holding the lock.
+		go func(o Observer) {
+			o.OnNotify(ev)
+			wg.Done()
+		}(o)
 	}
 }

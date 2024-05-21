@@ -3,43 +3,45 @@ package nested
 type State int8
 
 const (
-	NotReady State = iota
+	Initializing State = iota
 	Ready
+	Error
 	Stopped
 )
 
 var names = map[State]string{
-	NotReady: "not ready",
-	Ready:    "ready",
-	Stopped:  "stopped",
+	Initializing: "initializing",
+	Ready:        "ready",
+	Error:        "error",
+	Stopped:      "stopped",
 }
 
 func (s State) String() string {
 	return names[s]
 }
 
+// An event is a single notification of a state change.
+type Event struct {
+	OldState State
+	NewState State
+	Error    error // error condition if the new state is Error, nil otherwise
+}
+
+// An observer receives notifications of state changes.
+type Observer interface {
+	OnNotify(Event)
+}
+
 type Service interface {
 	// GetState returns the current state of the service.
 	GetState() State
-	// GetFullState returns the current state and error state of the service.
-	GetFullState() (State, error)
-	// Stop stops the service, and releases all resources.  After sending the final update to the stopped state,
-	// all subscriptions are unsubscribed.  Future calls to GetState() will always return Stopped.
+	// Err returns the most recent error condition.  Returns nil if the service has never been in the Err state.
+	Err() error
+	// Stop stops the service and releases all resources.
 	Stop()
-	// Subscribe starts sending all state changes to the channel provided.  The ID must unique.  Subscribe panics
-	// if the ID is already subscribed.
-	Subscribe(id string, channel chan<- Notification)
-	// Unsubscribe stops sending notifications.  The caller must provide the same ID as was provided in the call
-	// to Subscribe().  Repeated calls to Unsubscribed() with the same ID are ignored.  Calls to Unscrubscribe()
-	// with an unknown ID are also ignored.
-	Unsubscribe(id string)
-}
-
-type Notification struct {
-	// The ID as provided by the call to Subscribe()
-	ID string
-	// The new state
-	State State
-	// The new error state
-	Error error
+	// Register registers an observer, whose OnNotify method will be called any time there is a state change.  Does
+	// nothing if the observer is already registered.
+	Register(Observer)
+	// Deregister removes a registered observer.  Does nothing if the observer is not registered.
+	Deregister(Observer)
 }

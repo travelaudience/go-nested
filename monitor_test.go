@@ -35,97 +35,75 @@ func assertReceived[X any](t *testing.T, ch <-chan X) (x X) {
 
 func TestMonitor(t *testing.T) {
 
-	// A new Monitor is not ready.
+	// A new Monitor's state is Initializing.
 	mon := Monitor{}
-	s, e := mon.GetFullState()
-	assertEqual(t, NotReady, s)
-	assertEqual(t, nil, e)
+	assertEqual(t, Initializing, mon.GetState())
+	assertEqual(t, nil, mon.Err())
 
-	// Set to ready.
-	mon.SetState(Ready, nil)
-	s, e = mon.GetFullState()
-	assertEqual(t, Ready, s)
-	assertEqual(t, nil, e)
+	// Set to Ready.
+	mon.SetReady()
+	assertEqual(t, Ready, mon.GetState())
+	assertEqual(t, nil, mon.Err())
 
-	// Set to not ready with a reason.
+	// Set to Error.
 	reason := errors.New("some reason")
-	mon.SetState(NotReady, reason)
-	s, e = mon.GetFullState()
-	assertEqual(t, NotReady, s)
-	assertEqual(t, reason, e)
+	mon.SetError(reason)
+	assertEqual(t, Error, mon.GetState())
+	assertEqual(t, reason, mon.Err())
 
-	// Can't set to an undefined state.
-	assertPanic(t, func() { mon.SetState(-1, nil) }, "undefined")
-
-	// Set ready again.
-	mon.SetState(Ready, nil)
-	s, e = mon.GetFullState()
-	assertEqual(t, Ready, s)
-	assertEqual(t, nil, e)
+	// Set Ready again.  Previous error can still be retrieved.
+	mon.SetReady()
+	assertEqual(t, Ready, mon.GetState())
+	assertEqual(t, reason, mon.Err())
 
 	// Stop.
 	mon.Stop()
-	s, e = mon.GetFullState()
-	assertEqual(t, Stopped, s)
-	assertEqual(t, nil, e)
+	assertEqual(t, Stopped, mon.GetState())
 
 	// Can't restart.
-	assertPanic(t, func() { mon.SetState(Ready, nil) }, "cannot transition from stopped state")
-}
-
-func TestMonitor2(t *testing.T) {
-
-	mon := Monitor{}
-
-	// Failure on initialization.
-	failure := errors.New("some failure")
-	mon.SetState(Stopped, failure)
-	s, e := mon.GetFullState()
-	assertEqual(t, Stopped, s)
-	assertEqual(t, failure, e)
-
-	// Now Stop() should be a no-op
-	mon.Stop()
-	s, e = mon.GetFullState()
-	assertEqual(t, Stopped, s)
-	assertEqual(t, failure, e) // note that the error condition is still there
+	assertPanic(t, func() { mon.SetReady() }, "cannot transition from stopped state")
+	assertPanic(t, func() { mon.SetError(reason) }, "cannot transition from stopped state")
 }
 
 func TestMonitorNotifications(t *testing.T) {
 
 	mon := Monitor{}
-	ch := make(chan Notification, 1)
-	mon.Subscribe("foo", ch)
+	ch := make(testObserver, 1)
+	mon.Register(ch)
 
-	// Set to ready.
-	mon.SetState(Ready, nil)
+	// Set to Ready.
+	mon.SetReady()
 	n := assertReceived(t, ch)
-	assertEqual(t, Ready, n.State)
+	assertEqual(t, Initializing, n.OldState)
+	assertEqual(t, Ready, n.NewState)
 	assertEqual(t, nil, n.Error)
 
-	// Set to ready again, and there's not an additional notification.
-	mon.SetState(Ready, nil)
+	// Set to Ready again, and there's not an additional notification.
+	mon.SetReady()
 	if len(ch) > 0 {
 		t.Error("unexpected notification")
 	}
 
-	// Set to not ready with a reason.
+	// Set to Error.
 	reason := errors.New("some reason")
-	mon.SetState(NotReady, reason)
+	mon.SetError(reason)
 	n = assertReceived(t, ch)
-	assertEqual(t, NotReady, n.State)
+	assertEqual(t, Ready, n.OldState)
+	assertEqual(t, Error, n.NewState)
 	assertEqual(t, reason, n.Error)
 
 	// Set ready again.
-	mon.SetState(Ready, nil)
+	mon.SetReady()
 	n = assertReceived(t, ch)
-	assertEqual(t, Ready, n.State)
+	assertEqual(t, Error, n.OldState)
+	assertEqual(t, Ready, n.NewState)
 	assertEqual(t, nil, n.Error)
 
 	// Stop.
 	mon.Stop()
 	n = assertReceived(t, ch)
-	assertEqual(t, Stopped, n.State)
+	assertEqual(t, Ready, n.OldState)
+	assertEqual(t, Stopped, n.NewState)
 	assertEqual(t, nil, n.Error)
 
 	// Stop again, and there's not an additional notification.
@@ -137,29 +115,34 @@ func TestMonitorNotifications(t *testing.T) {
 	close(ch)
 }
 
-func TestUnsubscribe(t *testing.T) {
+func TestDeregister(t *testing.T) {
 
 	mon := Monitor{}
+	ch := make(testObserver, 1)
 
-	// Unsubscribing something that doesn't exist is not an error.
-	mon.Unsubscribe("bar")
+	// Deregistering something that doesn't exist is not an error.
+	mon.Deregister(ch)
 
-	ch := make(chan Notification, 1)
-	mon.Subscribe("foo", ch)
+	mon.Register(ch)
 
 	// Set to ready.
-	mon.SetState(Ready, nil)
+	mon.SetReady()
 	n := assertReceived(t, ch)
-	assertEqual(t, n.State, Ready)
+	assertEqual(t, n.OldState, Initializing)
+	assertEqual(t, n.NewState, Ready)
 	assertEqual(t, n.Error, nil)
 
-	mon.Unsubscribe("foo")
+	mon.Deregister(ch)
 
 	// No more notifications.
-	mon.SetState(NotReady, nil)
+	mon.Stop()
 	if len(ch) > 0 {
 		t.Error("unexpected notification")
 	}
 
 	close(ch)
 }
+
+type testObserver chan Event
+
+func (ch testObserver) OnNotify(ev Event) { ch <- ev }
