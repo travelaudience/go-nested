@@ -32,12 +32,13 @@ type Observer interface {
 	OnNotify(Event)
 }
 
+// The Service interface defines the behavior of a nested service.
 type Service interface {
 	// GetState returns the current state of the service.
 	GetState() State
 	// Err returns the most recent error condition.  Returns nil if the service has never been in the Err state.
 	Err() error
-	// Stop stops the service and releases all resources.
+	// Stop stops the service and releases all resources.  Stop should not return until the service shutdown is complete.
 	Stop()
 	// Register registers an observer, whose OnNotify method will be called any time there is a state change.  Does
 	// nothing if the observer is already registered.

@@ -78,7 +78,7 @@ func (m *Monitor) setState(newState State, newErr error) {
 	m.Lock()
 	defer m.Unlock()
 
-	if newState == m.state {
+	if newState == m.state && !(newState == Error && newErr != m.err) {
 		return // nothing to do
 	}
 

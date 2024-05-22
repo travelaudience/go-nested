@@ -25,6 +25,9 @@ func TestCollection(t *testing.T) {
 	assertEqual(t, nil, co.Err())
 	assertEqual(t, map[string]bool{"service 0": false, "service 1": false}, co.Up())
 
+	// Can't add another service 0.
+	assertPanic(t, func() { co.Add("service 0", s0) }, `add: label "service 0" already in use`)
+
 	// One service is ready.
 	s0.SetReady()
 	time.Sleep(10 * time.Millisecond)
@@ -39,11 +42,11 @@ func TestCollection(t *testing.T) {
 	assertEqual(t, nil, co.Err())
 	assertEqual(t, map[string]bool{"service 0": true, "service 1": true}, co.Up())
 
-	// One service is stopped, but the collection stays ready.
+	// One service is stopped.
 	s0.Stop()
 	time.Sleep(10 * time.Millisecond)
-	assertEqual(t, Ready, co.GetState())
-	assertEqual(t, nil, co.Err())
+	assertEqual(t, Error, co.GetState())
+	assertEqual(t, ErrStoppedServices, co.Err())
 	assertEqual(t, map[string]bool{"service 0": false, "service 1": true}, co.Up())
 
 	// One service is stopped, and the other is not ready.

@@ -1,6 +1,9 @@
 package nested
 
 import (
+	"errors"
+	"fmt"
+	"slices"
 	"strings"
 	"sync"
 )
@@ -9,6 +12,7 @@ import (
 //   - Ready if ALL of the services are ready.
 //   - Stopped if ALL of the services are stopped.
 //   - Error if ANY of the services are erroring.
+//   - Error if some (but not all) of the services are stopped.
 //   - Initializing of ANY of the services are initializing (and none are erroring).
 //
 // A Collection implements the Service interface.
@@ -36,18 +40,18 @@ type CollectionError struct {
 	Errors map[string]error
 }
 
+// An ErrStoppedServices error is returned by the collections Err() method when no services are erroring and some (but
+// not all) of the monitored services are stopped.  It normally indicates that we're in the process of shutting down.
+var ErrStoppedServices = errors.New("there are stopped services")
+
 // Error returns the error descriptions from all erroring services in a multi-line string.
 func (ce CollectionError) Error() string {
-	var bob strings.Builder
-	var sep = ""
+	msgs := make([]string, 0, len(ce.Errors))
 	for id, err := range ce.Errors {
-		bob.WriteString(sep)
-		bob.WriteString(id)
-		bob.WriteString(": ")
-		bob.WriteString(err.Error())
-		sep = "\n"
+		msgs = append(msgs, id+": "+err.Error())
 	}
-	return bob.String()
+	slices.Sort(msgs)
+	return strings.Join(msgs, "\n")
 }
 
 // Add adds a service to be monitored.  Panics if the label has already been used in this collection.
@@ -61,14 +65,14 @@ func (c *Collection) Add(label string, s Service) {
 	} else {
 		// Otherwise check that we're not reusing a label.
 		if _, ok := c.services[label]; ok {
-			panic("add: label " + label + " already in use")
+			panic(fmt.Sprintf("add: label %q already in use", label))
 		}
 	}
 
 	c.services[label] = s
 
 	// Just in case someone adds a service to a running collection, make sure we get its events.  The alternative would
-	// be to just disallow adding the service, but we don't want to do that.
+	// be to disallow adding the service in the first place, but we don't want to do that.
 	if c.running {
 		s.Register(c)
 	}
@@ -123,15 +127,15 @@ func (c *Collection) Stop() {
 // OnNotify updates the state of the collection according to the states of all of the monitored services.  No update is
 // done if any of the services are still initializing.
 //
-// OnNotify is used internally as a callback when any monitored service changes state.  It is not necessary to call this
-// directly.
+// OnNotify is used internally as a callback when any monitored service changes state.  It is not normally called directly.
 func (c *Collection) OnNotify(_ Event) {
 
 	c.Lock()
 	defer c.Unlock()
 
 	allStopped := true
-	errors := make(map[string]error)
+	anyStopped := false
+	errs := make(map[string]error)
 
 	if len(c.services) == 0 {
 		return
@@ -144,18 +148,25 @@ func (c *Collection) OnNotify(_ Event) {
 		case Ready:
 			allStopped = false
 		case Error:
-			errors[id] = s.Err()
+			errs[id] = s.Err()
 			allStopped = false // not actually needed, since we check for errors first
+		case Stopped:
+			anyStopped = true
 		}
 	}
 
-	if len(errors) > 0 {
-		c.Monitor.SetError(CollectionError{Errors: errors})
+	if len(errs) > 0 {
+		c.Monitor.SetError(CollectionError{Errors: errs})
 		return
 	}
 
 	if allStopped {
 		c.Monitor.Stop()
+		return
+	}
+
+	if anyStopped {
+		c.Monitor.SetError(ErrStoppedServices)
 		return
 	}
 
