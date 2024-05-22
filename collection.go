@@ -3,7 +3,7 @@ package nested
 import (
 	"errors"
 	"fmt"
-	"slices"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -50,7 +50,7 @@ func (ce CollectionError) Error() string {
 	for id, err := range ce.Errors {
 		msgs = append(msgs, id+": "+err.Error())
 	}
-	slices.Sort(msgs)
+	sort.Strings(msgs)
 	return strings.Join(msgs, "\n")
 }
 
