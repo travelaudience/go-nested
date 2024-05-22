@@ -33,7 +33,7 @@ type Collection struct {
 // Verifies that a Collection implements the Service interface.
 var _ Service = &Collection{}
 
-// A CallectionError is returned by the collections Err() method when any of the services are erroring.  It can be
+// A CollectionError is returned by the collections Err() method when any of the services are erroring.  It can be
 // inspected for details of the errors from each service.
 type CollectionError struct {
 	// Errors contains the error descriptions from each erroring service, indexed by label.  Only erroring services are included.
