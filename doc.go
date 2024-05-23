@@ -7,17 +7,26 @@
 // should implement.
 //
 // The state machine has the following states:
+//   - Initializing.  The service is not ready yet.
 //   - Ready.  The service is running normally.
 //   - Not ready.  The service is temporarily unavailable.
 //   - Stopped.  The service is permanently unavailable.
 //
-// Additionally, an error state is exposed.
-//   - When ready, the error state should always be nil.
-//   - When not ready, the error state may indicate a reason for being not ready.  Not ready with a nil error state
-//     implies that the service is initializing.
-//   - When stopped, the error state may indicate a reason for being stopped.  Stopped with a nil error state implies
-//     that the service was stopped by the calling process with Stop().
+// The state machine begins in the initializing state.  Once it transitions to one of the other states, it can never
+// return to the initializing state.
+//
+// A state machine in the stopped state cannot change states.
 //
 // This package also provides a Monitor type, which implements the state machine.  A Monitor can be embedded in
 // any service to make it a nested service.
+//
+// A common pattern is to include a Monitor in the struct that defines the nested service, e.g.
+//
+//	type MyService struct {
+//	    nested.Monitor
+//	       ...
+//	}
+//
+// The MyService constructor may either return an initializing service or a fully initialized service.  The MyService
+// Stop() method, however, should always wait until the service has stopped completely before returning.
 package nested

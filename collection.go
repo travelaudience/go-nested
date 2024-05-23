@@ -1,78 +1,94 @@
 package nested
 
 import (
-	"math/rand"
-	"strconv"
+	"errors"
+	"fmt"
+	"sort"
+	"strings"
 	"sync"
 )
 
 // A Collection monitors multiple services and keeps track of the overall state.  The overall state is defined as:
-//   - Ready if all of the services are ready.
-//   - Stopped if ANY of the services are stopped.
-//   - Not Ready otherwise.
+//   - Ready if ALL of the services are ready.
+//   - Stopped if ALL of the services are stopped.
+//   - Error if ANY of the services are erroring.
+//   - Error if some (but not all) of the services are stopped.
+//   - Initializing of ANY of the services are initializing (and none are erroring).
 //
-// A Collection implements the Service interface but does not set the error states.
+// A Collection implements the Service interface.
 //
 // Services to be monitored are added using the Add() method.  Services cannot be removed once added.
 //
-// An empty Collection is ready to use and in the Not Ready state.  A Collection must not be copied after first use.
+// To start monitoring, the caller must invoke the Run() method.  Only when Run has been called AND all of the services
+// have finished initialization will the collection change its state.  Services should not be added after calling Run().
+//
+// An empty Collection is ready to use and in the Initializing state.  A Collection must not be copied after first use.
 type Collection struct {
 	Monitor
 	sync.Mutex
 	services map[string]Service
-	id       string
-	updates  chan Notification
+	running  bool
 }
 
-// Verifies that a Monitor implements the Service interface.
+// Verifies that a Collection implements the Service interface.
 var _ Service = &Collection{}
 
-// Add adds a service to be monitored.  Panics if the service has already been added.  Panics if the label has been
-// used already for another service.
+// A CollectionError is returned by the collections Err() method when any of the services are erroring.  It can be
+// inspected for details of the errors from each service.
+type CollectionError struct {
+	// Errors contains the error descriptions from each erroring service, indexed by label.  Only erroring services are included.
+	Errors map[string]error
+}
+
+// An ErrStoppedServices error is returned by the collections Err() method when no services are erroring and some (but
+// not all) of the monitored services are stopped.  It normally indicates that we're in the process of shutting down.
+var ErrStoppedServices = errors.New("there are stopped services")
+
+// Error returns the error descriptions from all erroring services in a multi-line string.
+func (ce CollectionError) Error() string {
+	msgs := make([]string, 0, len(ce.Errors))
+	for id, err := range ce.Errors {
+		msgs = append(msgs, id+": "+err.Error())
+	}
+	sort.Strings(msgs)
+	return strings.Join(msgs, "\n")
+}
+
+// Add adds a service to be monitored.  Panics if the label has already been used in this collection.
 func (c *Collection) Add(label string, s Service) {
 	c.Lock()
 	defer c.Unlock()
 
-	// Initialize the update channel if this is the first service to be added.
+	// Initialize the maps if this is the first service to be added.
 	if c.services == nil {
 		c.services = make(map[string]Service)
-		c.updates = make(chan Notification)
-		go func() {
-			for range c.updates {
-				c.Monitor.SetState(c.getOverallState(), nil)
-			}
-		}()
-		// Using the same ID to subscribe to all monitored services means that Subscribe will panic below if a service
-		// is added twice.
-		c.id = "collection-" + strconv.Itoa(rand.Int())
 	} else {
 		// Otherwise check that we're not reusing a label.
 		if _, ok := c.services[label]; ok {
-			panic("add: label " + label + " already in use")
+			panic(fmt.Sprintf("add: label %q already in use", label))
 		}
 	}
 
 	c.services[label] = s
-	s.Subscribe(c.id, c.updates)
 
-	// Trigger an update to include the state of the newly added service.
-	go func() {
-		c.updates <- Notification{}
-	}()
+	// Just in case someone adds a service to a running collection, make sure we get its events.  The alternative would
+	// be to disallow adding the service in the first place, but we don't want to do that.
+	if c.running {
+		s.Register(c)
+	}
 }
 
-// StateCount returns the number of monitored services currently in the given state.
-func (c *Collection) StateCount(state State) int {
+// Run starts monitoring the added services.  The collection remains in the Initializing state until all of the
+// monitored services are finished initializing.
+//
+// Calling Run on an already running collection has no effect.
+func (c *Collection) Run() {
+	defer c.OnNotify(Event{})
 	c.Lock()
 	defer c.Unlock()
-
-	var n int
-	for _, service := range c.services {
-		if service.GetState() == state {
-			n++
-		}
+	for _, s := range c.services {
+		s.Register(c)
 	}
-	return n
 }
 
 // Up returns a map whose keys are the labels of all the currently monitored services and whose values are true if
@@ -91,58 +107,68 @@ func (c *Collection) Up() map[string]bool {
 // any of the services should be used after calling stop.
 func (c *Collection) Stop() {
 
-	// Start stopping all of the member services, and then release the lock.
-	u := func() chan Notification {
+	// Initialize the wait group first so that wg.Wait() runs after the lock is released.  That way, if we block
+	// on any of the Stop() calls, we do so without holding the lock.
+	wg := sync.WaitGroup{}
+	defer wg.Wait()
 
-		// Initialize the wait group first so that wg.Wait() runs after the lock is released.  That way, if we block
-		// on any of the Stop() calls, we do so without holding the lock.
-		wg := sync.WaitGroup{}
-		defer wg.Wait()
-
-		c.Lock()
-		defer c.Unlock()
-
-		wg.Add(len(c.services))
-		for _, service := range c.services {
-			// Unsubscribe first so that we can close the notifications channel.  Note that a side effect of
-			// unsubscribing here is that we need to explicitly set the monitor to stopped when we're done.
-			service.Unsubscribe(c.id)
-			go func(s Service) {
-				s.Stop()
-				wg.Done()
-			}(service)
-		}
-		c.services = nil
-
-		// Return the update channel so that we don't have to grab the lock again to get it.
-		return c.updates
-	}()
-
-	// Close the update channel to release the goroutine in Add() above.  If u is nil, that means that this collection
-	// hasn't been used, which is unexpected but not our concern.
-	if u != nil {
-		close(u)
-	}
-
-	// Need to explicitly set the monitor to stopped, since we unsubscribed already above.
-	c.Monitor.Stop()
-}
-
-// getOverallState computes the overall state of the collection: ready if all of the services are ready, stopped
-// if any of the services are stopped, and not ready otherwise.  getOverallState should not be called on an empty
-// collection, as it will give the incorrect state.
-func (c *Collection) getOverallState() State {
 	c.Lock()
 	defer c.Unlock()
 
-	we := State(Ready)
+	wg.Add(len(c.services))
 	for _, service := range c.services {
-		switch service.GetState() {
+		go func(s Service) {
+			s.Stop()
+			wg.Done()
+		}(service)
+	}
+}
+
+// OnNotify updates the state of the collection according to the states of all of the monitored services.  No update is
+// done if any of the services are still initializing.
+//
+// OnNotify is used internally as a callback when any monitored service changes state.  It is not normally called directly.
+func (c *Collection) OnNotify(_ Event) {
+
+	c.Lock()
+	defer c.Unlock()
+
+	allStopped := true
+	anyStopped := false
+	errs := make(map[string]error)
+
+	if len(c.services) == 0 {
+		return
+	}
+
+	for id, s := range c.services {
+		switch s.GetState() {
+		case Initializing:
+			return
+		case Ready:
+			allStopped = false
+		case Error:
+			errs[id] = s.Err()
+			allStopped = false // not actually needed, since we check for errors first
 		case Stopped:
-			return Stopped
-		case NotReady:
-			we = NotReady
+			anyStopped = true
 		}
 	}
-	return we
+
+	if len(errs) > 0 {
+		c.Monitor.SetError(CollectionError{Errors: errs})
+		return
+	}
+
+	if allStopped {
+		c.Monitor.Stop()
+		return
+	}
+
+	if anyStopped {
+		c.Monitor.SetError(ErrStoppedServices)
+		return
+	}
+
+	c.Monitor.SetReady()
 }
