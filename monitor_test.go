@@ -68,8 +68,8 @@ func TestMonitor(t *testing.T) {
 func TestMonitorNotifications(t *testing.T) {
 
 	mon := Monitor{}
-	ch := make(testObserver, 1)
-	mon.Register(ch)
+	ch := make(chan Event, 1)
+	mon.RegisterCallback("foo", func(ev Event) { ch <- ev })
 
 	// Set to Ready.
 	mon.SetReady()
@@ -118,12 +118,12 @@ func TestMonitorNotifications(t *testing.T) {
 func TestDeregister(t *testing.T) {
 
 	mon := Monitor{}
-	ch := make(testObserver, 1)
+	ch := make(chan Event, 1)
 
 	// Deregistering something that doesn't exist is not an error.
-	mon.Deregister(ch)
+	mon.DeregisterCallback("foo")
 
-	mon.Register(ch)
+	mon.RegisterCallback("foo", func(ev Event) { ch <- ev })
 
 	// Set to ready.
 	mon.SetReady()
@@ -132,7 +132,7 @@ func TestDeregister(t *testing.T) {
 	assertEqual(t, n.NewState, Ready)
 	assertEqual(t, n.Error, nil)
 
-	mon.Deregister(ch)
+	mon.DeregisterCallback("foo")
 
 	// No more notifications.
 	mon.Stop()
@@ -142,7 +142,3 @@ func TestDeregister(t *testing.T) {
 
 	close(ch)
 }
-
-type testObserver chan Event
-
-func (ch testObserver) OnNotify(ev Event) { ch <- ev }

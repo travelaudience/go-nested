@@ -11,7 +11,7 @@ type Monitor struct {
 	sync.Mutex
 	state     State // current state
 	err       error // current error state, if the state is not ready
-	observers map[Observer]struct{}
+	callbacks map[string]func(Event)
 }
 
 // Verifies that a Monitor implements the Service interface.  Note that the Service interface does NOT include the
@@ -38,22 +38,22 @@ func (m *Monitor) Stop() {
 	m.setState(Stopped, nil)
 }
 
-// Register registers an observer, whose OnNotify method will be called any time there is a state change.  Does nothing
-// if the observer is already registered.
-func (m *Monitor) Register(o Observer) {
+// RegisterCallback registers a function which will be called any time there is a state change.  Replaces any existing
+// callback registered with the provided id.
+func (m *Monitor) RegisterCallback(id string, f func(Event)) {
 	m.Lock()
 	defer m.Unlock()
-	if m.observers == nil {
-		m.observers = make(map[Observer]struct{})
+	if m.callbacks == nil {
+		m.callbacks = make(map[string]func(Event))
 	}
-	m.observers[o] = struct{}{}
+	m.callbacks[id] = f
 }
 
-// Deregister removes a registered observer.  Does nothing if the observer is not registered.
-func (m *Monitor) Deregister(o Observer) {
+// Deregister removes a registered callback.  Does nothing if there is no observer registered with the provided id.
+func (m *Monitor) DeregisterCallback(id string) {
 	m.Lock()
 	defer m.Unlock()
-	delete(m.observers, o)
+	delete(m.callbacks, id)
 }
 
 // SetReady sets the monitor state to Ready.  If there are registered observers, all observers are called before returning.
@@ -98,12 +98,12 @@ func (m *Monitor) setState(newState State, newErr error) {
 	}
 
 	// Notify all observers.
-	wg.Add(len(m.observers))
-	for o := range m.observers {
+	wg.Add(len(m.callbacks))
+	for _, cb := range m.callbacks {
 		// Run these in the background so as not to block while holding the lock.
-		go func(o Observer) {
-			o.OnNotify(ev)
+		go func(f func(Event)) {
+			f(ev)
 			wg.Done()
-		}(o)
+		}(cb)
 	}
 }
