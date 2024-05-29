@@ -43,4 +43,4 @@ type Service interface {
 }
 
 // A Token identifies a registered callback so that it can later be deregistered.
-type Token uint64
+type Token uint32

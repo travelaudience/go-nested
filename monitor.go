@@ -47,7 +47,14 @@ func (m *Monitor) RegisterCallback(f func(Event)) Token {
 	if m.callbacks == nil {
 		m.callbacks = make(map[Token]func(Event))
 	}
-	token := Token(rand.Uint64())
+
+	// Choose a random token that we haven't used.
+	var token Token
+	for ok := true; ok; {
+		token = Token(rand.Uint32())
+		_, ok = m.callbacks[token]
+	}
+
 	m.callbacks[token] = f
 	return token
 }
