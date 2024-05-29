@@ -3,9 +3,7 @@ package nested
 import (
 	"errors"
 	"fmt"
-	"math/rand"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 )
@@ -30,7 +28,6 @@ type Collection struct {
 	sync.Mutex
 	services map[string]Service
 	running  bool
-	id       string // random id to distinguish this from other collections when registering observers
 }
 
 // Verifies that a Collection implements the Service interface.
@@ -65,7 +62,6 @@ func (c *Collection) Add(label string, s Service) {
 	// Initialize the maps if this is the first service to be added.
 	if c.services == nil {
 		c.services = make(map[string]Service)
-		c.id = strconv.FormatUint(rand.Uint64(), 16)
 	} else {
 		// Otherwise check that we're not reusing a label.
 		if _, ok := c.services[label]; ok {
@@ -78,7 +74,7 @@ func (c *Collection) Add(label string, s Service) {
 	// Just in case someone adds a service to a running collection, make sure we get its events.  The alternative would
 	// be to disallow adding the service in the first place, but we don't want to do that.
 	if c.running {
-		s.RegisterCallback(c.id, c.stateChanged)
+		s.RegisterCallback(c.stateChanged)
 	}
 }
 
@@ -91,7 +87,7 @@ func (c *Collection) Run() {
 	c.Lock()
 	defer c.Unlock()
 	for _, s := range c.services {
-		s.RegisterCallback(c.id, c.stateChanged)
+		s.RegisterCallback(c.stateChanged)
 	}
 }
 

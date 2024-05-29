@@ -35,9 +35,12 @@ type Service interface {
 	Err() error
 	// Stop stops the service and releases all resources.  Stop should not return until the service shutdown is complete.
 	Stop()
-	// RegisterCallback registers a function which will be called any time there is a state change.  Replaces any
-	// existing callback registered with the provided id.
-	RegisterCallback(id string, f func(Event))
-	// Deregister removes a registered callback.  Does nothing if there is no observer registered with the provided id.
-	DeregisterCallback(id string)
+	// RegisterCallback registers a function which will be called any time there is a state change.  Returns a token
+	// that can be used to deregister it later.
+	RegisterCallback(f func(Event)) Token
+	// Deregister removes a registered callback.  Does nothing if there is no callback registered with the provided token.
+	DeregisterCallback(Token)
 }
+
+// A Token identifies a registered callback so that it can later be deregistered.
+type Token uint64

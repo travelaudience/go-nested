@@ -1,6 +1,7 @@
 package nested
 
 import (
+	"math/rand"
 	"sync"
 )
 
@@ -11,7 +12,7 @@ type Monitor struct {
 	sync.Mutex
 	state     State // current state
 	err       error // current error state, if the state is not ready
-	callbacks map[string]func(Event)
+	callbacks map[Token]func(Event)
 }
 
 // Verifies that a Monitor implements the Service interface.  Note that the Service interface does NOT include the
@@ -38,22 +39,24 @@ func (m *Monitor) Stop() {
 	m.setState(Stopped, nil)
 }
 
-// RegisterCallback registers a function which will be called any time there is a state change.  Replaces any existing
-// callback registered with the provided id.
-func (m *Monitor) RegisterCallback(id string, f func(Event)) {
+// RegisterCallback registers a function which will be called any time there is a state change.  Returns a token that
+// can be used to deregister it later.
+func (m *Monitor) RegisterCallback(f func(Event)) Token {
 	m.Lock()
 	defer m.Unlock()
 	if m.callbacks == nil {
-		m.callbacks = make(map[string]func(Event))
+		m.callbacks = make(map[Token]func(Event))
 	}
-	m.callbacks[id] = f
+	token := Token(rand.Uint64())
+	m.callbacks[token] = f
+	return token
 }
 
-// Deregister removes a registered callback.  Does nothing if there is no observer registered with the provided id.
-func (m *Monitor) DeregisterCallback(id string) {
+// Deregister removes a registered callback.  Does nothing if there is no callback registered with the provided token.
+func (m *Monitor) DeregisterCallback(token Token) {
 	m.Lock()
 	defer m.Unlock()
-	delete(m.callbacks, id)
+	delete(m.callbacks, token)
 }
 
 // SetReady sets the monitor state to Ready.  If there are registered observers, all observers are called before returning.
