@@ -27,11 +27,6 @@ type Event struct {
 	Error    error // error condition if the new state is Error, nil otherwise
 }
 
-// An observer receives notifications of state changes.
-type Observer interface {
-	OnNotify(Event)
-}
-
 // The Service interface defines the behavior of a nested service.
 type Service interface {
 	// GetState returns the current state of the service.
@@ -40,9 +35,12 @@ type Service interface {
 	Err() error
 	// Stop stops the service and releases all resources.  Stop should not return until the service shutdown is complete.
 	Stop()
-	// Register registers an observer, whose OnNotify method will be called any time there is a state change.  Does
-	// nothing if the observer is already registered.
-	Register(Observer)
-	// Deregister removes a registered observer.  Does nothing if the observer is not registered.
-	Deregister(Observer)
+	// RegisterCallback registers a function which will be called any time there is a state change.  Returns a token
+	// that can be used to deregister it later.
+	RegisterCallback(f func(Event)) Token
+	// Deregister removes a registered callback.  Does nothing if there is no callback registered with the provided token.
+	DeregisterCallback(Token)
 }
+
+// A Token identifies a registered callback so that it can later be deregistered.
+type Token uint32

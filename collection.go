@@ -74,7 +74,7 @@ func (c *Collection) Add(label string, s Service) {
 	// Just in case someone adds a service to a running collection, make sure we get its events.  The alternative would
 	// be to disallow adding the service in the first place, but we don't want to do that.
 	if c.running {
-		s.Register(c)
+		s.RegisterCallback(c.stateChanged)
 	}
 }
 
@@ -83,11 +83,11 @@ func (c *Collection) Add(label string, s Service) {
 //
 // Calling Run on an already running collection has no effect.
 func (c *Collection) Run() {
-	defer c.OnNotify(Event{})
+	defer c.stateChanged(Event{})
 	c.Lock()
 	defer c.Unlock()
 	for _, s := range c.services {
-		s.Register(c)
+		s.RegisterCallback(c.stateChanged)
 	}
 }
 
@@ -124,11 +124,9 @@ func (c *Collection) Stop() {
 	}
 }
 
-// OnNotify updates the state of the collection according to the states of all of the monitored services.  No update is
+// stateChanged updates the state of the collection according to the states of all of the monitored services.  No update is
 // done if any of the services are still initializing.
-//
-// OnNotify is used internally as a callback when any monitored service changes state.  It is not normally called directly.
-func (c *Collection) OnNotify(_ Event) {
+func (c *Collection) stateChanged(_ Event) {
 
 	c.Lock()
 	defer c.Unlock()

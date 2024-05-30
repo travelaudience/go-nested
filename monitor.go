@@ -1,6 +1,7 @@
 package nested
 
 import (
+	"math/rand"
 	"sync"
 )
 
@@ -11,7 +12,7 @@ type Monitor struct {
 	sync.Mutex
 	state     State // current state
 	err       error // current error state, if the state is not ready
-	observers map[Observer]struct{}
+	callbacks map[Token]func(Event)
 }
 
 // Verifies that a Monitor implements the Service interface.  Note that the Service interface does NOT include the
@@ -38,22 +39,31 @@ func (m *Monitor) Stop() {
 	m.setState(Stopped, nil)
 }
 
-// Register registers an observer, whose OnNotify method will be called any time there is a state change.  Does nothing
-// if the observer is already registered.
-func (m *Monitor) Register(o Observer) {
+// RegisterCallback registers a function which will be called any time there is a state change.  Returns a token that
+// can be used to deregister it later.
+func (m *Monitor) RegisterCallback(f func(Event)) Token {
 	m.Lock()
 	defer m.Unlock()
-	if m.observers == nil {
-		m.observers = make(map[Observer]struct{})
+	if m.callbacks == nil {
+		m.callbacks = make(map[Token]func(Event))
 	}
-	m.observers[o] = struct{}{}
+
+	// Choose a random token that we haven't used.
+	var token Token
+	for ok := true; ok; {
+		token = Token(rand.Uint32())
+		_, ok = m.callbacks[token]
+	}
+
+	m.callbacks[token] = f
+	return token
 }
 
-// Deregister removes a registered observer.  Does nothing if the observer is not registered.
-func (m *Monitor) Deregister(o Observer) {
+// Deregister removes a registered callback.  Does nothing if there is no callback registered with the provided token.
+func (m *Monitor) DeregisterCallback(token Token) {
 	m.Lock()
 	defer m.Unlock()
-	delete(m.observers, o)
+	delete(m.callbacks, token)
 }
 
 // SetReady sets the monitor state to Ready.  If there are registered observers, all observers are called before returning.
@@ -98,12 +108,12 @@ func (m *Monitor) setState(newState State, newErr error) {
 	}
 
 	// Notify all observers.
-	wg.Add(len(m.observers))
-	for o := range m.observers {
+	wg.Add(len(m.callbacks))
+	for _, cb := range m.callbacks {
 		// Run these in the background so as not to block while holding the lock.
-		go func(o Observer) {
-			o.OnNotify(ev)
+		go func(f func(Event)) {
+			f(ev)
 			wg.Done()
-		}(o)
+		}(cb)
 	}
 }
