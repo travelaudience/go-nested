@@ -31,8 +31,10 @@ type Event struct {
 type Service interface {
 	// GetState returns the current state of the service.
 	GetState() State
-	// Err returns the most recent error condition.  Returns nil if the service has never been in the Err state.
+	// Err returns the most recent error condition.  Returns nil if the service has never been in the Error state.
 	Err() error
+	// ErrCount returns the number of consecutive Error states.  Returns 0 if the service is not in the Error state.
+	ErrCount() int
 	// Stop stops the service and releases all resources.  Stop should not return until the service shutdown is complete.
 	Stop()
 	// RegisterCallback registers a function which will be called any time there is a state change.  Returns a token

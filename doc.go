@@ -9,7 +9,7 @@
 // The state machine has the following states:
 //   - Initializing.  The service is not ready yet.
 //   - Ready.  The service is running normally.
-//   - Not ready.  The service is temporarily unavailable.
+//   - Error.  The service is temporarily unavailable.
 //   - Stopped.  The service is permanently unavailable.
 //
 // The state machine begins in the initializing state.  Once it transitions to one of the other states, it can never

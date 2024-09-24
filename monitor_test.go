@@ -39,22 +39,32 @@ func TestMonitor(t *testing.T) {
 	mon := Monitor{}
 	assertEqual(t, Initializing, mon.GetState())
 	assertEqual(t, nil, mon.Err())
+	assertEqual(t, 0, mon.ErrCount())
 
 	// Set to Ready.
 	mon.SetReady()
 	assertEqual(t, Ready, mon.GetState())
 	assertEqual(t, nil, mon.Err())
+	assertEqual(t, 0, mon.ErrCount())
 
 	// Set to Error.
 	reason := errors.New("some reason")
 	mon.SetError(reason)
 	assertEqual(t, Error, mon.GetState())
 	assertEqual(t, reason, mon.Err())
+	assertEqual(t, 1, mon.ErrCount())
+
+	// Two consecutive errors.
+	mon.SetError(reason)
+	assertEqual(t, Error, mon.GetState())
+	assertEqual(t, reason, mon.Err())
+	assertEqual(t, 2, mon.ErrCount())
 
 	// Set Ready again.  Previous error can still be retrieved.
 	mon.SetReady()
 	assertEqual(t, Ready, mon.GetState())
 	assertEqual(t, reason, mon.Err())
+	assertEqual(t, 0, mon.ErrCount())
 
 	// Stop.
 	mon.Stop()
