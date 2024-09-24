@@ -20,19 +20,23 @@ func (s State) String() string {
 	return names[s]
 }
 
-// An event is a single notification of a state change.
+// An event is a single notification of a state change.  If the current state is Error, an event is issued for
+// every error encountered, since the error count will increase.
 type Event struct {
 	OldState State
 	NewState State
 	Error    error // error condition if the new state is Error, nil otherwise
+	ErrCount int
 }
 
 // The Service interface defines the behavior of a nested service.
 type Service interface {
 	// GetState returns the current state of the service.
 	GetState() State
-	// Err returns the most recent error condition.  Returns nil if the service has never been in the Err state.
+	// Err returns the most recent error condition.  Returns nil if the service has never been in the Error state.
 	Err() error
+	// ErrCount returns the number of consecutive Error states.  Returns 0 if the service is not in the Error state.
+	ErrCount() int
 	// Stop stops the service and releases all resources.  Stop should not return until the service shutdown is complete.
 	Stop()
 	// RegisterCallback registers a function which will be called any time there is a state change.  Returns a token

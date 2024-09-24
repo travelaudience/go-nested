@@ -1,6 +1,7 @@
 package nested
 
 import (
+	"math"
 	"math/rand"
 	"sync"
 )
@@ -12,6 +13,7 @@ type Monitor struct {
 	sync.Mutex
 	state     State // current state
 	err       error // current error state, if the state is not ready
+	errCount  int   // number of consecutive errors
 	callbacks map[Token]func(Event)
 }
 
@@ -32,6 +34,14 @@ func (m *Monitor) Err() error {
 	m.Lock()
 	defer m.Unlock()
 	return m.err
+}
+
+// ErrCount returns the number of consective errors recorded for this service.  If the service is not in Error state,
+// ErrCount returns 0.
+func (m *Monitor) ErrCount() int {
+	m.Lock()
+	defer m.Unlock()
+	return m.errCount
 }
 
 // Stop sets the service to stopped.  If there are registered observers, all observers are called before returning.
@@ -88,8 +98,16 @@ func (m *Monitor) setState(newState State, newErr error) {
 	m.Lock()
 	defer m.Unlock()
 
-	if newState == m.state && !(newState == Error && newErr != m.err) {
+	if newState == m.state && newState != Error {
 		return // nothing to do
+	}
+
+	if newState == Error {
+		if m.errCount < math.MaxInt {
+			m.errCount++
+		}
+	} else {
+		m.errCount = 0
 	}
 
 	if m.state == Stopped {
@@ -100,6 +118,7 @@ func (m *Monitor) setState(newState State, newErr error) {
 		OldState: m.state,
 		NewState: newState,
 		Error:    newErr,
+		ErrCount: m.errCount,
 	}
 
 	m.state = newState
