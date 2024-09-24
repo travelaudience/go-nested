@@ -98,16 +98,16 @@ func (m *Monitor) setState(newState State, newErr error) {
 	m.Lock()
 	defer m.Unlock()
 
+	if newState == m.state && newState != Error {
+		return // nothing to do
+	}
+
 	if newState == Error {
 		if m.errCount < math.MaxInt {
 			m.errCount++
 		}
 	} else {
 		m.errCount = 0
-	}
-
-	if newState == m.state && !(newState == Error && newErr != m.err) {
-		return // nothing to do
 	}
 
 	if m.state == Stopped {
@@ -118,6 +118,7 @@ func (m *Monitor) setState(newState State, newErr error) {
 		OldState: m.state,
 		NewState: newState,
 		Error:    newErr,
+		ErrCount: m.errCount,
 	}
 
 	m.state = newState

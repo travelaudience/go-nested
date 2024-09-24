@@ -87,6 +87,7 @@ func TestMonitorNotifications(t *testing.T) {
 	assertEqual(t, Initializing, n.OldState)
 	assertEqual(t, Ready, n.NewState)
 	assertEqual(t, nil, n.Error)
+	assertEqual(t, 0, n.ErrCount)
 
 	// Set to Ready again, and there's not an additional notification.
 	mon.SetReady()
@@ -101,6 +102,14 @@ func TestMonitorNotifications(t *testing.T) {
 	assertEqual(t, Ready, n.OldState)
 	assertEqual(t, Error, n.NewState)
 	assertEqual(t, reason, n.Error)
+	assertEqual(t, 1, n.ErrCount)
+
+	// Two consecutive errors.
+	mon.SetError(reason)
+	n = assertReceived(t, ch)
+	assertEqual(t, Error, mon.GetState())
+	assertEqual(t, reason, mon.Err())
+	assertEqual(t, 2, n.ErrCount)
 
 	// Set ready again.
 	mon.SetReady()
@@ -108,6 +117,7 @@ func TestMonitorNotifications(t *testing.T) {
 	assertEqual(t, Error, n.OldState)
 	assertEqual(t, Ready, n.NewState)
 	assertEqual(t, nil, n.Error)
+	assertEqual(t, 0, n.ErrCount)
 
 	// Stop.
 	mon.Stop()
@@ -115,6 +125,7 @@ func TestMonitorNotifications(t *testing.T) {
 	assertEqual(t, Ready, n.OldState)
 	assertEqual(t, Stopped, n.NewState)
 	assertEqual(t, nil, n.Error)
+	assertEqual(t, 0, n.ErrCount)
 
 	// Stop again, and there's not an additional notification.
 	mon.Stop()

@@ -20,11 +20,13 @@ func (s State) String() string {
 	return names[s]
 }
 
-// An event is a single notification of a state change.
+// An event is a single notification of a state change.  If the current state is Error, an event is issued for
+// every error encountered, since the error count will increase.
 type Event struct {
 	OldState State
 	NewState State
 	Error    error // error condition if the new state is Error, nil otherwise
+	ErrCount int
 }
 
 // The Service interface defines the behavior of a nested service.
