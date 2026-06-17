@@ -55,13 +55,13 @@ func TestMonitor(t *testing.T) {
 	assertEqual(t, 1, mon.ErrCount())
 
 	// Two consecutive errors.
-	mon.SetError(reason)
+	mon.SetReadyOrError(reason)
 	assertEqual(t, Error, mon.GetState())
 	assertEqual(t, reason, mon.Err())
 	assertEqual(t, 2, mon.ErrCount())
 
 	// Set Ready again.  Previous error can still be retrieved.
-	mon.SetReady()
+	mon.SetReadyOrError(nil)
 	assertEqual(t, Ready, mon.GetState())
 	assertEqual(t, reason, mon.Err())
 	assertEqual(t, 0, mon.ErrCount())

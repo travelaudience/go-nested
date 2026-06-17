@@ -82,10 +82,20 @@ func (m *Monitor) SetReady() {
 	m.setState(Ready, nil)
 }
 
-// SetReady sets the monitor state to Error.  If there are registered observers, all observers are called before returning.
+// SetError sets the monitor state to Error.  If there are registered observers, all observers are called before returning.
 // Panics if the monitor is already stopped.
 func (m *Monitor) SetError(err error) {
 	m.setState(Error, err)
+}
+
+// SetReadyOrError sets the monitor state to Ready if err is nil or Error if err is non-nil.  If there are registered
+// observers, all observers are called before returning.  Panics if the monitor is already stopped.
+func (m *Monitor) SetReadyOrError(err error) {
+	if err == nil {
+		m.setState(Ready, nil)
+	} else {
+		m.setState(Error, err)
+	}
 }
 
 func (m *Monitor) setState(newState State, newErr error) {

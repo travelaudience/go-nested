@@ -6,9 +6,7 @@ orbs:
 executors:
   golang-executor:
     docker:
-    - image: cimg/go:1.19
-    environment:
-      GO111MODULE: "on"
+    - image: cimg/go:1.25
 
 workflows:
   build_and_test:
