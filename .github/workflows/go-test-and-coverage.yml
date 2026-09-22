@@ -1,0 +1,63 @@
+name: Go Test and Coverage
+
+on:
+  push:
+    branches:
+      - "**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GO111MODULE: "on"
+
+jobs:
+  go_test_and_coverage:
+    name: Run Go Tests and Coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Go
+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+        with:
+          go-version: "1.25"
+          cache: true
+
+      - name: Run go tests
+        run: |
+          set -euo pipefail
+          go test \
+            -count=1 \
+            -parallel=1 \
+            -coverprofile=cover-source.out \
+            -covermode=atomic \
+            -race \
+            -failfast \
+            ./...
+
+      - name: Show coverage summary
+        run: |
+          set -euo pipefail
+
+          coverage_summary="$(go tool cover -func=cover-source.out | tail -1)"
+          echo "$coverage_summary"
+
+          {
+            echo "### Go coverage"
+            echo
+            echo '```text'
+            echo "$coverage_summary"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage profile
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: go-coverage-profile
+          path: cover-source.out
+          if-no-files-found: ignore
+          retention-days: 1
